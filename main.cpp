@@ -14,8 +14,10 @@ std::vector<std::string> clipboard; // Буфер для копирования 
 int currentLine = 0;
 int currentColumn = 0;
 std::string filename;
-
 bool running = true;
+
+enum Mode { NORMAL, INSERT, COMMAND };
+Mode currentMode = NORMAL;
 
 void LoadFile(const std::string& filename) {
     std::ifstream file(filename);
@@ -50,33 +52,9 @@ void SaveFile(const std::string& filename) {
 void DisplayStatus() {
     move(LINES - 1, 0);
     clrtoeol();
-    printw("-- %s -- %s %d,%d", 
-        (currentMode == NORMAL) ? "NORMAL" : (currentMode == INSERT) ? "INSERT" : "COMMAND", 
-        filename.c_str(), currentLine + 1, currentColumn + 1);
-}
-
-void DisplayBuffer() {
-    clear(); // Очистка окна
-
-    int y = 0;
-    for (const auto& line : buffer) {
-        int x = 0;
-        for (const char& ch : line) {
-            if (ch == 'i' || ch == 'o' || ch == 'f' || ch == 'r') { // Пример ключевых слов
-                attron(COLOR_PAIR(1));
-                mvaddch(y, x, ch);
-                attroff(COLOR_PAIR(1));
-            } else {
-                mvaddch(y, x, ch);
-            }
-            ++x;
-        }
-        ++y;
-    }
-
-    move(currentLine, currentColumn);
-    DisplayStatus();
-    refresh();
+    printw("-- %s -- %s %d,%d",
+           (currentMode == NORMAL) ? "NORMAL" : (currentMode == INSERT) ? "INSERT" : "COMMAND",
+           filename.c_str(), currentLine + 1, currentColumn + 1);
 }
 
 void DisplayBuffer() {
@@ -101,9 +79,6 @@ void DisplayBuffer() {
     move(currentLine, currentColumn);
     refresh();
 }
-
-enum Mode { NORMAL, INSERT, COMMAND };
-Mode currentMode = NORMAL;
 
 void MoveCursor(int dx, int dy) {
     int newColumn = currentColumn + dx;
@@ -159,6 +134,19 @@ void CopyLine() {
     clipboard.push_back(buffer[currentLine]);
 }
 
+void CutLine() {
+    if (currentLine < buffer.size()) {
+        undoStack.push({currentLine, buffer[currentLine]});
+        clipboard.clear();
+        clipboard.push_back(buffer[currentLine]);
+        buffer.erase(buffer.begin() + currentLine);
+        if (currentLine >= buffer.size()) {
+            currentLine = buffer.size() - 1;
+        }
+        DisplayBuffer();
+    }
+}
+
 void PasteLine() {
     if (!clipboard.empty()) {
         undoStack.push({currentLine, buffer[currentLine]});
@@ -174,11 +162,11 @@ void Replace() {
     mvprintw(LINES - 1, 0, ":s/");
     char findQuery[256];
     getnstr(findQuery, 255);
-    
+
     mvprintw(LINES - 1, 0, ":s/%s/", findQuery);
     char replaceQuery[256];
     getnstr(replaceQuery, 255);
-    
+
     noecho();
     curs_set(0);
 
@@ -191,6 +179,35 @@ void Replace() {
     }
 
     DisplayBuffer();
+}
+
+void Search() {
+    echo();
+    curs_set(1);
+
+    mvprintw(LINES - 1, 0, "/");
+    char query[256];
+    getnstr(query, 255);
+    std::string searchQuery = query;
+    int searchPos = -1;
+
+    noecho();
+    curs_set(0);
+
+    for (int i = currentLine; i < buffer.size(); ++i) {
+        size_t pos = buffer[i].find(searchQuery, (i == currentLine && searchPos != -1) ? searchPos + 1 : 0);
+        if (pos != std::string::npos) {
+            currentLine = i;
+            currentColumn = pos;
+            DisplayBuffer();
+            return;
+        }
+    }
+
+    move(LINES - 1, 0);
+    clrtoeol();
+    printw("Pattern not found: %s", searchQuery.c_str());
+    refresh();
 }
 
 void ProcessCommand(const std::string& command) {
@@ -221,23 +238,9 @@ void ProcessCommand(const std::string& command) {
     }
 }
 
-void CutLine() {
-    if (currentLine < buffer.size()) {
-        undoStack.push({currentLine, buffer[currentLine]});
-        clipboard.clear();
-        clipboard.push_back(buffer[currentLine]);
-        buffer.erase(buffer.begin() + currentLine);
-        if (currentLine >= buffer.size()) {
-            currentLine = buffer.size() - 1;
-        }
-        DisplayBuffer();
-    }
-}
-
 void ProcessInput() {
     std::string commandBuffer;
     int ch;
-    int x = 0, y = 0;
 
     while (running) {
         ch = getch();
@@ -346,11 +349,15 @@ void SignalHandler(int signum) {
         endwin();
         running = false;
         raise(SIGSTOP);
+    } else if (signum == SIGINT) {
+        endwin();
+        exit(0);
     }
 }
 
 int main() {
     signal(SIGTSTP, SignalHandler);
+    signal(SIGINT, SignalHandler);
 
     // Запрос имени файла у пользователя
     std::cout << "Enter filename: ";
