@@ -47,6 +47,38 @@ void SaveFile(const std::string& filename) {
     file.close();
 }
 
+void DisplayStatus() {
+    move(LINES - 1, 0);
+    clrtoeol();
+    printw("-- %s -- %s %d,%d", 
+        (currentMode == NORMAL) ? "NORMAL" : (currentMode == INSERT) ? "INSERT" : "COMMAND", 
+        filename.c_str(), currentLine + 1, currentColumn + 1);
+}
+
+void DisplayBuffer() {
+    clear(); // Очистка окна
+
+    int y = 0;
+    for (const auto& line : buffer) {
+        int x = 0;
+        for (const char& ch : line) {
+            if (ch == 'i' || ch == 'o' || ch == 'f' || ch == 'r') { // Пример ключевых слов
+                attron(COLOR_PAIR(1));
+                mvaddch(y, x, ch);
+                attroff(COLOR_PAIR(1));
+            } else {
+                mvaddch(y, x, ch);
+            }
+            ++x;
+        }
+        ++y;
+    }
+
+    move(currentLine, currentColumn);
+    DisplayStatus();
+    refresh();
+}
+
 void DisplayBuffer() {
     clear(); // Очистка окна
 
@@ -135,6 +167,32 @@ void PasteLine() {
     }
 }
 
+void Replace() {
+    echo();
+    curs_set(1);
+
+    mvprintw(LINES - 1, 0, ":s/");
+    char findQuery[256];
+    getnstr(findQuery, 255);
+    
+    mvprintw(LINES - 1, 0, ":s/%s/", findQuery);
+    char replaceQuery[256];
+    getnstr(replaceQuery, 255);
+    
+    noecho();
+    curs_set(0);
+
+    for (auto& line : buffer) {
+        size_t pos = 0;
+        while ((pos = line.find(findQuery, pos)) != std::string::npos) {
+            line.replace(pos, strlen(findQuery), replaceQuery);
+            pos += strlen(replaceQuery);
+        }
+    }
+
+    DisplayBuffer();
+}
+
 void ProcessCommand(const std::string& command) {
     if (command == "w") {
         SaveFile(filename);
@@ -149,15 +207,31 @@ void ProcessCommand(const std::string& command) {
     } else if (command == "r") {
         Redo();
     } else if (command == "/") {
-        // TODO: Поиск
+        Search();
+    } else if (command == "n") {
+        NextMatch();
+    } else if (command == "N") {
+        PreviousMatch();
     } else if (command == ":s") {
-        // TODO: Замена
+        Replace();
     } else if (command.substr(0, 2) == "e ") {
         filename = command.substr(2);
         LoadFile(filename);
         DisplayBuffer();
     }
-    // Добавление других команд
+}
+
+void CutLine() {
+    if (currentLine < buffer.size()) {
+        undoStack.push({currentLine, buffer[currentLine]});
+        clipboard.clear();
+        clipboard.push_back(buffer[currentLine]);
+        buffer.erase(buffer.begin() + currentLine);
+        if (currentLine >= buffer.size()) {
+            currentLine = buffer.size() - 1;
+        }
+        DisplayBuffer();
+    }
 }
 
 void ProcessInput() {
@@ -197,14 +271,7 @@ void ProcessInput() {
                     break;
                 case 'd':
                     if (getch() == 'd') { // dd для удаления строки
-                        if (currentLine < buffer.size()) {
-                            undoStack.push({currentLine, buffer[currentLine]});
-                            buffer.erase(buffer.begin() + currentLine);
-                            if (currentLine >= buffer.size()) {
-                                currentLine = buffer.size() - 1;
-                            }
-                            DisplayBuffer();
-                        }
+                        CutLine();
                     }
                     break;
                 case 'y':
@@ -219,13 +286,13 @@ void ProcessInput() {
                     Undo();
                     break;
                 case '/':
-                    // TODO: Поиск
+                    Search();
                     break;
                 case 'n':
-                    // TODO: Переход к следующему совпадению при поиске
+                    NextMatch();
                     break;
                 case 'N':
-                    // TODO: Переход к предыдущему совпадению при поиске
+                    PreviousMatch();
                     break;
                 case 26: // Ctrl+Z
                     running = false;
