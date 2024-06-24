@@ -10,18 +10,21 @@
 std::vector<std::string> buffer;
 std::stack<std::pair<int, std::string>> undoStack; // Стек для отмены
 std::stack<std::pair<int, std::string>> redoStack; // Стек для повтора
+std::vector<std::string> clipboard; // Буфер для копирования строк
 int currentLine = 0;
 int currentColumn = 0;
+std::string filename;
 
 bool running = true;
 
-void LoadFile(const char* filename) {
+void LoadFile(const std::string& filename) {
     std::ifstream file(filename);
     if (!file.is_open()) {
         std::cerr << "Cannot open file: " << filename << std::endl;
         return;
     }
 
+    buffer.clear();
     std::string line;
     while (std::getline(file, line)) {
         buffer.push_back(line);
@@ -30,7 +33,7 @@ void LoadFile(const char* filename) {
     file.close();
 }
 
-void SaveFile(const char* filename) {
+void SaveFile(const std::string& filename) {
     std::ofstream file(filename);
     if (!file.is_open()) {
         std::cerr << "Cannot open file: " << filename << std::endl;
@@ -101,6 +104,7 @@ void Undo() {
 
         redoStack.push({line, buffer[line]});
         buffer[line] = text;
+        DisplayBuffer();
     }
 }
 
@@ -114,13 +118,29 @@ void Redo() {
 
         undoStack.push({line, buffer[line]});
         buffer[line] = text;
+        DisplayBuffer();
+    }
+}
+
+void CopyLine() {
+    clipboard.clear();
+    clipboard.push_back(buffer[currentLine]);
+}
+
+void PasteLine() {
+    if (!clipboard.empty()) {
+        undoStack.push({currentLine, buffer[currentLine]});
+        buffer.insert(buffer.begin() + currentLine, clipboard.begin(), clipboard.end());
+        DisplayBuffer();
     }
 }
 
 void ProcessCommand(const std::string& command) {
     if (command == "w") {
-        SaveFile("example.txt");
-        printw("\nFile saved\n");
+        SaveFile(filename);
+        move(LINES - 1, 0);
+        clrtoeol();
+        printw("File saved");
     } else if (command == "q") {
         endwin();
         exit(0);
@@ -132,6 +152,10 @@ void ProcessCommand(const std::string& command) {
         // TODO: Поиск
     } else if (command == ":s") {
         // TODO: Замена
+    } else if (command.substr(0, 2) == "e ") {
+        filename = command.substr(2);
+        LoadFile(filename);
+        DisplayBuffer();
     }
     // Добавление других команд
 }
@@ -185,17 +209,14 @@ void ProcessInput() {
                     break;
                 case 'y':
                     if (getch() == 'y') { // yy для копирования строки
-                        // TODO: Копирование строки
+                        CopyLine();
                     }
                     break;
                 case 'p':
-                    // TODO: Вставка содержимого буфера
-                    break;
-                case 'r':
-                    // TODO: Замена символа
+                    PasteLine();
                     break;
                 case 'u':
-                    // TODO: Отмена последнего действия
+                    Undo();
                     break;
                 case '/':
                     // TODO: Поиск
@@ -264,7 +285,9 @@ void SignalHandler(int signum) {
 int main() {
     signal(SIGTSTP, SignalHandler);
 
-    const char* filename = "example.txt";
+    // Запрос имени файла у пользователя
+    std::cout << "Enter filename: ";
+    std::getline(std::cin, filename);
     LoadFile(filename);
 
     // Инициализация ncurses
