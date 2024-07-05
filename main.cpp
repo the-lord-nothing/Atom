@@ -6,6 +6,8 @@
 #include <csignal>
 #include <unistd.h>
 #include <stack>
+#include <unordered_set>
+#include <regex>
 
 std::vector<std::string> buffer;
 std::stack<std::pair<int, std::string>> undoStack;
@@ -18,6 +20,9 @@ bool running = true;
 
 enum Mode { NORMAL, INSERT, COMMAND };
 Mode currentMode = NORMAL;
+
+std::unordered_set<std::string> keywords;
+std::string fileExtension;
 
 void LoadFile(const std::string& filename) {
     std::ifstream file(filename);
@@ -33,6 +38,22 @@ void LoadFile(const std::string& filename) {
     }
 
     file.close();
+
+    size_t extPos = filename.find_last_of('.');
+    fileExtension = (extPos != std::string::npos) ? filename.substr(extPos + 1) : "";
+
+    keywords.clear();
+    if (fileExtension == "cpp" || fileExtension == "h") {
+        keywords = {"int", "float", "return", "if", "else", "while", "for", "class", "public", "private", "protected"};
+    } else if (fileExtension == "py") {
+        keywords = {"def", "return", "if", "else", "elif", "while", "for", "class", "import", "from"};
+    } else if (fileExtension == "js") {
+        keywords = {"function", "return", "if", "else", "for", "while", "var", "let", "const"};
+    } else if (fileExtension == "rb") {
+        keywords = {"def", "end", "class", "module", "if", "else", "elsif", "while", "for", "do", "begin", "rescue", "ensure", "yield", "return"};
+    } else if (fileExtension == "asm") {
+        keywords = {"mov", "add", "sub", "jmp", "cmp", "je", "jne", "jz", "jnz", "push", "pop", "call", "ret", "int"};
+    }
 }
 
 void SaveFile(const std::string& filename) {
@@ -63,15 +84,29 @@ void DisplayBuffer() {
     int y = 0;
     for (const auto& line : buffer) {
         int x = 0;
+        std::string word;
         for (const char& ch : line) {
-            if (ch == 'i' || ch == 'o' || ch == 'f' || ch == 'r') {
-                attron(COLOR_PAIR(1));
-                mvaddch(y, x, ch);
-                attroff(COLOR_PAIR(1));
+            if (isalnum(ch) || ch == '_') {
+                word += ch;
             } else {
+                if (keywords.find(word) != keywords.end()) {
+                    attron(COLOR_PAIR(1));
+                    mvprintw(y, x - word.size(), word.c_str());
+                    attroff(COLOR_PAIR(1));
+                } else {
+                    mvprintw(y, x - word.size(), word.c_str());
+                }
+                word.clear();
                 mvaddch(y, x, ch);
             }
             ++x;
+        }
+        if (!word.empty() && keywords.find(word) != keywords.end()) {
+            attron(COLOR_PAIR(1));
+            mvprintw(y, x - word.size(), word.c_str());
+            attroff(COLOR_PAIR(1));
+        } else if (!word.empty()) {
+            mvprintw(y, x - word.size(), word.c_str());
         }
         ++y;
     }
