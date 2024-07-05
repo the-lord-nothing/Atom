@@ -8,9 +8,9 @@
 #include <stack>
 
 std::vector<std::string> buffer;
-std::stack<std::pair<int, std::string>> undoStack; // Стек для отмены
-std::stack<std::pair<int, std::string>> redoStack; // Стек для повтора
-std::vector<std::string> clipboard; // Буфер для копирования строк
+std::stack<std::pair<int, std::string>> undoStack;
+std::stack<std::pair<int, std::string>> redoStack;
+std::vector<std::string> clipboard;
 int currentLine = 0;
 int currentColumn = 0;
 std::string filename;
@@ -58,13 +58,13 @@ void DisplayStatus() {
 }
 
 void DisplayBuffer() {
-    clear(); // Очистка окна
+    clear();
 
     int y = 0;
     for (const auto& line : buffer) {
         int x = 0;
         for (const char& ch : line) {
-            if (ch == 'i' || ch == 'o' || ch == 'f' || ch == 'r') { // Пример ключевых слов
+            if (ch == 'i' || ch == 'o' || ch == 'f' || ch == 'r') {
                 attron(COLOR_PAIR(1));
                 mvaddch(y, x, ch);
                 attroff(COLOR_PAIR(1));
@@ -84,7 +84,6 @@ void MoveCursor(int dx, int dy) {
     int newColumn = currentColumn + dx;
     int newLine = currentLine + dy;
 
-    // Ограничения на перемещение курсора
     if (newLine < 0) {
         newLine = 0;
     } else if (newLine >= buffer.size()) {
@@ -147,7 +146,16 @@ void CutLine() {
     }
 }
 
-void PasteLine() {
+void PasteLineAfter() {
+    if (!clipboard.empty()) {
+        undoStack.push({currentLine + 1, buffer[currentLine]});
+        buffer.insert(buffer.begin() + currentLine + 1, clipboard.begin(), clipboard.end());
+        ++currentLine;
+        DisplayBuffer();
+    }
+}
+
+void PasteLineBefore() {
     if (!clipboard.empty()) {
         undoStack.push({currentLine, buffer[currentLine]});
         buffer.insert(buffer.begin() + currentLine, clipboard.begin(), clipboard.end());
@@ -273,17 +281,20 @@ void ProcessInput() {
                     MoveCursor(1, 0);
                     break;
                 case 'd':
-                    if (getch() == 'd') { // dd для удаления строки
+                    if (getch() == 'd') {
                         CutLine();
                     }
                     break;
                 case 'y':
-                    if (getch() == 'y') { // yy для копирования строки
+                    if (getch() == 'y') {
                         CopyLine();
                     }
                     break;
                 case 'p':
-                    PasteLine();
+                    PasteLineAfter();
+                    break;
+                case 'P':
+                    PasteLineBefore();
                     break;
                 case 'u':
                     Undo();
@@ -297,15 +308,15 @@ void ProcessInput() {
                 case 'N':
                     PreviousMatch();
                     break;
-                case 26: // Ctrl+Z
+                case 26:
                     running = false;
                     break;
-                case 18: // Ctrl+R
+                case 18:
                     Redo();
                     break;
             }
         } else if (currentMode == INSERT) {
-            if (ch == 27) { // ESC key
+            if (ch == 27) {
                 currentMode = NORMAL;
                 move(LINES - 1, 0);
                 clrtoeol();
@@ -326,7 +337,7 @@ void ProcessInput() {
                 }
             }
         } else if (currentMode == COMMAND) {
-            if (ch == '\r') { // Enter key
+            if (ch == '\r') {
                 ProcessCommand(commandBuffer);
                 commandBuffer.clear();
                 currentMode = NORMAL;
@@ -359,20 +370,17 @@ int main() {
     signal(SIGTSTP, SignalHandler);
     signal(SIGINT, SignalHandler);
 
-    // Запрос имени файла у пользователя
     std::cout << "Enter filename: ";
     std::getline(std::cin, filename);
     LoadFile(filename);
 
-    // Инициализация ncurses
     initscr();
     start_color();
-    init_pair(1, COLOR_RED, COLOR_BLACK); // Настройка цветовой пары
+    init_pair(1, COLOR_RED, COLOR_BLACK);
 
     DisplayBuffer();
     ProcessInput();
 
-    // Завершение работы ncurses
     endwin();
 
     return 0;
