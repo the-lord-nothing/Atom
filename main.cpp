@@ -43,8 +43,8 @@ void LoadFile(const std::string& filename) {
     fileExtension = (extPos != std::string::npos) ? filename.substr(extPos + 1) : "";
 
     keywords.clear();
-    if (fileExtension == "cpp" || fileExtension == "h") {
-        keywords = {"int", "float", "return", "if", "else", "while", "for", "class", "public", "private", "protected"};
+    if (fileExtension == "c" || fileExtension == "cpp" || fileExtension == "h") {
+    keywords = {"int", "float", "return", "if", "else", "while", "for", "class", "public", "private", "protected"};
     } else if (fileExtension == "py") {
         keywords = {"def", "return", "if", "else", "elif", "while", "for", "class", "import", "from"};
     } else if (fileExtension == "js") {
