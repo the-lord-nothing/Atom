@@ -100,6 +100,49 @@ void MoveCursor(int dx, int dy) {
     currentColumn = newColumn;
 }
 
+void MoveToNextWord() {
+    while (currentColumn < buffer[currentLine].size() && isalnum(buffer[currentLine][currentColumn])) {
+        currentColumn++;
+    }
+    while (currentColumn < buffer[currentLine].size() && !isalnum(buffer[currentLine][currentColumn])) {
+        currentColumn++;
+    }
+    if (currentColumn >= buffer[currentLine].size() && currentLine < buffer.size() - 1) {
+        currentLine++;
+        currentColumn = 0;
+    }
+}
+
+void MoveToPreviousWord() {
+    while (currentColumn > 0 && !isalnum(buffer[currentLine][currentColumn - 1])) {
+        currentColumn--;
+    }
+    while (currentColumn > 0 && isalnum(buffer[currentLine][currentColumn - 1])) {
+        currentColumn--;
+    }
+}
+
+void DeleteToNextWord() {
+    if (currentLine < buffer.size()) {
+        int startColumn = currentColumn;
+        std::string& line = buffer[currentLine];
+
+        MoveToNextWord();
+        undoStack.push({currentLine, line});
+        line.erase(startColumn, currentColumn - startColumn);
+        currentColumn = startColumn;
+        DisplayBuffer();
+    }
+}
+
+void ChangeToNextWord() {
+    DeleteToNextWord();
+    currentMode = INSERT;
+    move(LINES - 1, 0);
+    clrtoeol();
+    printw("-- INSERT --");
+}
+
 void Undo() {
     if (!undoStack.empty()) {
         auto action = undoStack.top();
@@ -280,9 +323,22 @@ void ProcessInput() {
                 case 'l':
                     MoveCursor(1, 0);
                     break;
+                case 'w':
+                    MoveToNextWord();
+                    break;
+                case 'b':
+                    MoveToPreviousWord();
+                    break;
                 case 'd':
-                    if (getch() == 'd') {
+                    if (getch() == 'w') {
+                        DeleteToNextWord();
+                    } else if (getch() == 'd') {
                         CutLine();
+                    }
+                    break;
+                case 'c':
+                    if (getch() == 'w') {
+                        ChangeToNextWord();
                     }
                     break;
                 case 'y':
