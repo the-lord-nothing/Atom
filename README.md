@@ -1,4 +1,4 @@
-# Фещь Text Editor Usage Documentation
+# Atom Text Editor Usage Documentation
 
 This text editor is developed based on the concepts and functionalities of Vim, known for its efficiency and powerful text editing capabilities.
 
