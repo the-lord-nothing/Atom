@@ -164,9 +164,12 @@ void DeleteToNextWord() {
 
         MoveToNextWord();
         undoStack.push({currentLine, line});
-        line.erase(startColumn, currentColumn - startColumn);
-        currentColumn = startColumn;
-        DisplayBuffer();
+        // Проверка на выход за границы
+        if (currentColumn <= line.size()) {
+            line.erase(startColumn, currentColumn - startColumn);
+            currentColumn = startColumn;
+            DisplayBuffer();
+        }
     }
 }
 
@@ -184,13 +187,16 @@ void Undo() {
         undoStack.pop();
 
         int line = action.first;
-        std::string& text = action.second;
+        // Проверка на выход за границы
+        if (line < buffer.size()) {
+            std::string& text = action.second;
 
-        redoStack.push({line, buffer[line]});
-        buffer[line] = text;
-        currentLine = line;
-        currentColumn = text.size();
-        DisplayBuffer();
+            redoStack.push({line, buffer[line]});
+            buffer[line] = text;
+            currentLine = line;
+            currentColumn = text.size();
+            DisplayBuffer();
+        }
     }
 }
 
@@ -200,19 +206,25 @@ void Redo() {
         redoStack.pop();
 
         int line = action.first;
-        std::string& text = action.second;
+        // Проверка на выход за границы
+        if (line < buffer.size()) {
+            std::string& text = action.second;
 
-        undoStack.push({line, buffer[line]});
-        buffer[line] = text;
-        currentLine = line;
-        currentColumn = text.size();
-        DisplayBuffer();
+            undoStack.push({line, buffer[line]});
+            buffer[line] = text;
+            currentLine = line;
+            currentColumn = text.size();
+            DisplayBuffer();
+        }
     }
 }
 
 void CopyLine() {
     clipboard.clear();
-    clipboard.push_back(buffer[currentLine]);
+    // Проверка на выход за границы
+    if (currentLine < buffer.size()) {
+        clipboard.push_back(buffer[currentLine]);
+    }
 }
 
 void CutLine() {
@@ -224,7 +236,8 @@ void CutLine() {
         if (currentLine >= buffer.size()) {
             currentLine = buffer.size() - 1;
         }
-               if (currentLine < 0) {
+        // Проверка на выход за границы
+        if (currentLine < 0) {
             currentLine = 0;
         }
         currentColumn = 0;
@@ -234,7 +247,10 @@ void CutLine() {
 
 void PasteLineBefore() {
     if (!clipboard.empty()) {
-        undoStack.push({currentLine, buffer[currentLine]});
+        // Проверка на выход за границы
+        if (currentLine >= 0 && currentLine < buffer.size()) {
+            undoStack.push({currentLine, buffer[currentLine]});
+        }
         buffer.insert(buffer.begin() + currentLine, clipboard[0]);
         currentColumn = 0;
         DisplayBuffer();
