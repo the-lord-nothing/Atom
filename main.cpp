@@ -44,7 +44,7 @@ void LoadFile(const std::string& filename) {
 
     keywords.clear();
     if (fileExtension == "c" || fileExtension == "cpp" || fileExtension == "h") {
-    keywords = {"int", "float", "return", "if", "else", "while", "for", "class", "public", "private", "protected"};
+        keywords = {"int", "float", "return", "if", "else", "while", "for", "class", "public", "private", "protected"};
     } else if (fileExtension == "py") {
         keywords = {"def", "return", "if", "else", "elif", "while", "for", "class", "import", "from"};
     } else if (fileExtension == "js") {
@@ -267,6 +267,9 @@ void Replace() {
     DisplayBuffer();
 }
 
+    DisplayBuffer();
+}
+
 void Search() {
     echo();
     curs_set(1);
@@ -296,6 +299,60 @@ void Search() {
     refresh();
 }
 
+void NextMatch() {
+    if (lastSearchQuery.empty()) {
+        move(LINES - 1, 0);
+        clrtoeol();
+        printw("No previous search query");
+        refresh();
+        return;
+    }
+
+    for (int i = currentLine; i < buffer.size(); ++i) {
+        size_t startPos = (i == currentLine) ? currentColumn + 1 : 0;
+        size_t pos = buffer[i].find(lastSearchQuery, startPos);
+        if (pos != std::string::npos) {
+            currentLine = i;
+            currentColumn = pos;
+            DisplayBuffer();
+            return;
+        }
+    }
+
+    move(LINES - 1, 0);
+    clrtoeol();
+    printw("Pattern not found: %s", lastSearchQuery.c_str());
+    refresh();
+}
+
+void PreviousMatch() {
+    if (lastSearchQuery.empty()) {
+        move(LINES - 1, 0);
+        clrtoeol();
+        printw("No previous search query");
+        refresh();
+        return;
+    }
+
+    for (int i = currentLine; i >= 0; --i) {
+        size_t startPos = (i == currentLine) ? currentColumn - 1 : buffer[i].size() - 1;
+        if (startPos == std::string::npos) continue;
+
+        size_t pos = buffer[i].rfind(lastSearchQuery, startPos);
+        if (pos != std::string::npos) {
+            currentLine = i;
+            currentColumn = pos;
+            DisplayBuffer();
+            return;
+        }
+    }
+
+    move(LINES - 1, 0);
+    clrtoeol();
+    printw("Pattern not found: %s", lastSearchQuery.c_str());
+    refresh();
+}
+
 void ProcessCommand(const std::string& command) {
     if (command == "w") {
         SaveFile(filename);
@@ -315,13 +372,42 @@ void ProcessCommand(const std::string& command) {
         NextMatch();
     } else if (command == "N") {
         PreviousMatch();
-    } else if (command == ":s") {
+    } else if (command.substr(0, 2) == "s/") {
         Replace();
     } else if (command.substr(0, 2) == "e ") {
         filename = command.substr(2);
         LoadFile(filename);
         DisplayBuffer();
     }
+}
+
+void Search() {
+    echo();
+    curs_set(1);
+
+    mvprintw(LINES - 1, 0, "/");
+    char query[256];
+    getnstr(query, 255);
+    lastSearchQuery = query;  // Save the search query
+    int searchPos = -1;
+
+    noecho();
+    curs_set(0);
+
+    for (int i = currentLine; i < buffer.size(); ++i) {
+        size_t pos = buffer[i].find(lastSearchQuery, (i == currentLine && searchPos != -1) ? searchPos + 1 : 0);
+        if (pos != std::string::npos) {
+            currentLine = i;
+            currentColumn = pos;
+            DisplayBuffer();
+            return;
+        }
+    }
+
+    move(LINES - 1, 0);
+    clrtoeol();
+    printw("Pattern not found: %s", lastSearchQuery.c_str());
+    refresh();
 }
 
 void ProcessInput() {
@@ -345,6 +431,7 @@ void ProcessInput() {
                     move(LINES - 1, 0);
                     clrtoeol();
                     printw(":");
+                    commandBuffer.clear();
                     break;
                 case 'h':
                     MoveCursor(-1, 0);
@@ -365,19 +452,22 @@ void ProcessInput() {
                     MoveToPreviousWord();
                     break;
                 case 'd':
-                    if (getch() == 'w') {
+                    ch = getch();
+                    if (ch == 'w') {
                         DeleteToNextWord();
-                    } else if (getch() == 'd') {
+                    } else if (ch == 'd') {
                         CutLine();
                     }
                     break;
                 case 'c':
-                    if (getch() == 'w') {
+                    ch = getch();
+                    if (ch == 'w') {
                         ChangeToNextWord();
                     }
                     break;
                 case 'y':
-                    if (getch() == 'y') {
+                    ch = getch();
+                    if (ch == 'y') {
                         CopyLine();
                     }
                     break;
@@ -399,15 +489,15 @@ void ProcessInput() {
                 case 'N':
                     PreviousMatch();
                     break;
-                case 26:
+                case 26:  // CTRL+Z
                     running = false;
                     break;
-                case 18:
+                case 18:  // CTRL+R
                     Redo();
                     break;
             }
         } else if (currentMode == INSERT) {
-            if (ch == 27) {
+            if (ch == 27) {  // Escape key
                 currentMode = NORMAL;
                 move(LINES - 1, 0);
                 clrtoeol();
@@ -428,7 +518,7 @@ void ProcessInput() {
                 }
             }
         } else if (currentMode == COMMAND) {
-            if (ch == '\r') {
+            if (ch == '\r') {  // Enter key
                 ProcessCommand(commandBuffer);
                 commandBuffer.clear();
                 currentMode = NORMAL;
