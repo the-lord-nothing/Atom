@@ -188,6 +188,8 @@ void Undo() {
 
         redoStack.push({line, buffer[line]});
         buffer[line] = text;
+        currentLine = line;
+        currentColumn = text.size();
         DisplayBuffer();
     }
 }
@@ -202,6 +204,8 @@ void Redo() {
 
         undoStack.push({line, buffer[line]});
         buffer[line] = text;
+        currentLine = line;
+        currentColumn = text.size();
         DisplayBuffer();
     }
 }
@@ -220,15 +224,10 @@ void CutLine() {
         if (currentLine >= buffer.size()) {
             currentLine = buffer.size() - 1;
         }
-        DisplayBuffer();
-    }
-}
-
-void PasteLineAfter() {
-    if (!clipboard.empty()) {
-        undoStack.push({currentLine + 1, buffer[currentLine]});
-        buffer.insert(buffer.begin() + currentLine + 1, clipboard.begin(), clipboard.end());
-        ++currentLine;
+               if (currentLine < 0) {
+            currentLine = 0;
+        }
+        currentColumn = 0;
         DisplayBuffer();
     }
 }
@@ -236,333 +235,175 @@ void PasteLineAfter() {
 void PasteLineBefore() {
     if (!clipboard.empty()) {
         undoStack.push({currentLine, buffer[currentLine]});
-        buffer.insert(buffer.begin() + currentLine, clipboard.begin(), clipboard.end());
+        buffer.insert(buffer.begin() + currentLine, clipboard[0]);
+        currentColumn = 0;
         DisplayBuffer();
     }
 }
 
-void Replace() {
-    echo();
-    curs_set(1);
-
-    mvprintw(LINES - 1, 0, ":s/");
-    char findQuery[256];
-    getnstr(findQuery, 255);
-
-    mvprintw(LINES - 1, 0, ":s/%s/", findQuery);
-    char replaceQuery[256];
-    getnstr(replaceQuery, 255);
-
-    noecho();
-    curs_set(0);
-
-    for (auto& line : buffer) {
-        size_t pos = 0;
-        while ((pos = line.find(findQuery, pos)) != std::string::npos) {
-            line.replace(pos, strlen(findQuery), replaceQuery);
-            pos += strlen(replaceQuery);
+void PasteLineAfter() {
+    if (!clipboard.empty()) {
+        if (currentLine + 1 < buffer.size()) {
+            undoStack.push({currentLine + 1, buffer[currentLine + 1]});
+            buffer.insert(buffer.begin() + currentLine + 1, clipboard[0]);
+        } else {
+            buffer.push_back(clipboard[0]);
         }
-    }
-
-    DisplayBuffer();
-}
-
-    DisplayBuffer();
-}
-
-void Search() {
-    echo();
-    curs_set(1);
-
-    mvprintw(LINES - 1, 0, "/");
-    char query[256];
-    getnstr(query, 255);
-    std::string searchQuery = query;
-    int searchPos = -1;
-
-    noecho();
-    curs_set(0);
-
-    for (int i = currentLine; i < buffer.size(); ++i) {
-        size_t pos = buffer[i].find(searchQuery, (i == currentLine && searchPos != -1) ? searchPos + 1 : 0);
-        if (pos != std::string::npos) {
-            currentLine = i;
-            currentColumn = pos;
-            DisplayBuffer();
-            return;
-        }
-    }
-
-    move(LINES - 1, 0);
-    clrtoeol();
-    printw("Pattern not found: %s", searchQuery.c_str());
-    refresh();
-}
-
-void NextMatch() {
-    if (lastSearchQuery.empty()) {
-        move(LINES - 1, 0);
-        clrtoeol();
-        printw("No previous search query");
-        refresh();
-        return;
-    }
-
-    for (int i = currentLine; i < buffer.size(); ++i) {
-        size_t startPos = (i == currentLine) ? currentColumn + 1 : 0;
-        size_t pos = buffer[i].find(lastSearchQuery, startPos);
-        if (pos != std::string::npos) {
-            currentLine = i;
-            currentColumn = pos;
-            DisplayBuffer();
-            return;
-        }
-    }
-
-    move(LINES - 1, 0);
-    clrtoeol();
-    printw("Pattern not found: %s", lastSearchQuery.c_str());
-    refresh();
-}
-
-void PreviousMatch() {
-    if (lastSearchQuery.empty()) {
-        move(LINES - 1, 0);
-        clrtoeol();
-        printw("No previous search query");
-        refresh();
-        return;
-    }
-
-    for (int i = currentLine; i >= 0; --i) {
-        size_t startPos = (i == currentLine) ? currentColumn - 1 : buffer[i].size() - 1;
-        if (startPos == std::string::npos) continue;
-
-        size_t pos = buffer[i].rfind(lastSearchQuery, startPos);
-        if (pos != std::string::npos) {
-            currentLine = i;
-            currentColumn = pos;
-            DisplayBuffer();
-            return;
-        }
-    }
-
-    move(LINES - 1, 0);
-    clrtoeol();
-    printw("Pattern not found: %s", lastSearchQuery.c_str());
-    refresh();
-}
-
-void ProcessCommand(const std::string& command) {
-    if (command == "w") {
-        SaveFile(filename);
-        move(LINES - 1, 0);
-        clrtoeol();
-        printw("File saved");
-    } else if (command == "q") {
-        endwin();
-        exit(0);
-    } else if (command == "u") {
-        Undo();
-    } else if (command == "r") {
-        Redo();
-    } else if (command == "/") {
-        Search();
-    } else if (command == "n") {
-        NextMatch();
-    } else if (command == "N") {
-        PreviousMatch();
-    } else if (command.substr(0, 2) == "s/") {
-        Replace();
-    } else if (command.substr(0, 2) == "e ") {
-        filename = command.substr(2);
-        LoadFile(filename);
+        currentLine++;
+        currentColumn = 0;
         DisplayBuffer();
     }
 }
 
-void Search() {
-    echo();
-    curs_set(1);
-
-    mvprintw(LINES - 1, 0, "/");
-    char query[256];
-    getnstr(query, 255);
-    lastSearchQuery = query;  // Save the search query
-    int searchPos = -1;
-
-    noecho();
-    curs_set(0);
-
-    for (int i = currentLine; i < buffer.size(); ++i) {
-        size_t pos = buffer[i].find(lastSearchQuery, (i == currentLine && searchPos != -1) ? searchPos + 1 : 0);
-        if (pos != std::string::npos) {
-            currentLine = i;
-            currentColumn = pos;
-            DisplayBuffer();
-            return;
-        }
+void ProcessNormalMode(int ch) {
+    switch (ch) {
+        case 'h':
+            MoveCursor(-1, 0);
+            break;
+        case 'j':
+            MoveCursor(0, 1);
+            break;
+        case 'k':
+            MoveCursor(0, -1);
+            break;
+        case 'l':
+            MoveCursor(1, 0);
+            break;
+        case 'w':
+            MoveToNextWord();
+            break;
+        case 'b':
+            MoveToPreviousWord();
+            break;
+        case 'x':
+            DeleteToNextWord();
+            break;
+        case 'c':
+            ChangeToNextWord();
+            break;
+        case 'u':
+            Undo();
+            break;
+        case 'r':
+            Redo();
+            break;
+        case 'y':
+            CopyLine();
+            break;
+        case 'd':
+            CutLine();
+            break;
+        case 'p':
+            PasteLineAfter();
+            break;
+        case 'P':
+            PasteLineBefore();
+            break;
+        case 'i':
+            currentMode = INSERT;
+            move(LINES - 1, 0);
+            clrtoeol();
+            printw("-- INSERT --");
+            break;
+        case ':':
+            currentMode = COMMAND;
+            move(LINES - 1, 0);
+            clrtoeol();
+            printw(":");
+            refresh();
+            break;
     }
+}
 
+void ProcessInsertMode(int ch) {
+    switch (ch) {
+        case 27: // ESC
+            currentMode = NORMAL;
+            move(LINES - 1, 0);
+            clrtoeol();
+            printw("-- NORMAL --");
+            break;
+        case KEY_BACKSPACE:
+        case 127:
+            if (currentColumn > 0) {
+                buffer[currentLine].erase(--currentColumn, 1);
+            }
+            break;
+        default:
+            buffer[currentLine].insert(currentColumn++, 1, ch);
+            break;
+    }
+    DisplayBuffer();
+}
+
+void ProcessCommandMode(int ch) {
+    static std::string command;
+    switch (ch) {
+        case 10: // Enter
+            if (command == "w") {
+                SaveFile(filename);
+            } else if (command == "q") {
+                running = false;
+            }
+            command.clear();
+            currentMode = NORMAL;
+            break;
+        case 27: // ESC
+            command.clear();
+            currentMode = NORMAL;
+            break;
+        default:
+            command += ch;
+            break;
+    }
     move(LINES - 1, 0);
     clrtoeol();
-    printw("Pattern not found: %s", lastSearchQuery.c_str());
+    printw(":%s", command.c_str());
     refresh();
 }
 
-void ProcessInput() {
-    std::string commandBuffer;
-    int ch;
-
-    while (running) {
-        ch = getch();
-
-        if (currentMode == NORMAL) {
-            switch (ch) {
-                case 'i':
-                    currentMode = INSERT;
-                    move(LINES - 1, 0);
-                    clrtoeol();
-                    printw("-- INSERT --");
-                    move(currentLine, currentColumn);
-                    break;
-                case ':':
-                    currentMode = COMMAND;
-                    move(LINES - 1, 0);
-                    clrtoeol();
-                    printw(":");
-                    commandBuffer.clear();
-                    break;
-                case 'h':
-                    MoveCursor(-1, 0);
-                    break;
-                case 'j':
-                    MoveCursor(0, 1);
-                    break;
-                case 'k':
-                    MoveCursor(0, -1);
-                    break;
-                case 'l':
-                    MoveCursor(1, 0);
-                    break;
-                case 'w':
-                    MoveToNextWord();
-                    break;
-                case 'b':
-                    MoveToPreviousWord();
-                    break;
-                case 'd':
-                    ch = getch();
-                    if (ch == 'w') {
-                        DeleteToNextWord();
-                    } else if (ch == 'd') {
-                        CutLine();
-                    }
-                    break;
-                case 'c':
-                    ch = getch();
-                    if (ch == 'w') {
-                        ChangeToNextWord();
-                    }
-                    break;
-                case 'y':
-                    ch = getch();
-                    if (ch == 'y') {
-                        CopyLine();
-                    }
-                    break;
-                case 'p':
-                    PasteLineAfter();
-                    break;
-                case 'P':
-                    PasteLineBefore();
-                    break;
-                case 'u':
-                    Undo();
-                    break;
-                case '/':
-                    Search();
-                    break;
-                case 'n':
-                    NextMatch();
-                    break;
-                case 'N':
-                    PreviousMatch();
-                    break;
-                case 26:  // CTRL+Z
-                    running = false;
-                    break;
-                case 18:  // CTRL+R
-                    Redo();
-                    break;
-            }
-        } else if (currentMode == INSERT) {
-            if (ch == 27) {  // Escape key
-                currentMode = NORMAL;
-                move(LINES - 1, 0);
-                clrtoeol();
-                printw("-- NORMAL --");
-            } else {
-                if (ch == KEY_BACKSPACE || ch == 127) {
-                    if (!buffer[currentLine].empty() && currentColumn > 0) {
-                        undoStack.push({currentLine, buffer[currentLine]});
-                        buffer[currentLine].erase(--currentColumn, 1);
-                        move(currentLine, currentColumn);
-                        delch();
-                    }
-                } else {
-                    undoStack.push({currentLine, buffer[currentLine]});
-                    buffer[currentLine].insert(currentColumn++, 1, ch);
-                    move(currentLine, currentColumn);
-                    insch(ch);
-                }
-            }
-        } else if (currentMode == COMMAND) {
-            if (ch == '\r') {  // Enter key
-                ProcessCommand(commandBuffer);
-                commandBuffer.clear();
-                currentMode = NORMAL;
-                move(LINES - 1, 0);
-                clrtoeol();
-                printw("-- NORMAL --");
-            } else {
-                commandBuffer += ch;
-                addch(ch);
-            }
-        }
-
-        move(currentLine, currentColumn);
-        refresh();
-    }
+void SignalHandler(int signal) {
+    endwin();
+    std::cerr << "Interrupt signal (" << signal << ") received.\n";
+    exit(signal);
 }
 
-void SignalHandler(int signum) {
-    if (signum == SIGTSTP) {
-        endwin();
-        running = false;
-        raise(SIGSTOP);
-    } else if (signum == SIGINT) {
-        endwin();
-        exit(0);
+int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        std::cerr << "Usage: " << argv[0] << " <filename>" << std::endl;
+        return 1;
     }
-}
 
-int main() {
-    signal(SIGTSTP, SignalHandler);
-    signal(SIGINT, SignalHandler);
-
-    std::cout << "Enter filename: ";
-    std::getline(std::cin, filename);
+    filename = argv[1];
     LoadFile(filename);
 
     initscr();
+    raw();
+    noecho();
+    keypad(stdscr, TRUE);
     start_color();
-    init_pair(1, COLOR_RED, COLOR_BLACK);
+    init_pair(1, COLOR_BLUE, COLOR_BLACK);
 
-    DisplayBuffer();
-    ProcessInput();
+    signal(SIGINT, SignalHandler);
+
+    while (running) {
+        DisplayBuffer();
+        DisplayStatus();
+
+        int ch = getch();
+        switch (currentMode) {
+            case NORMAL:
+                ProcessNormalMode(ch);
+                break;
+            case INSERT:
+                ProcessInsertMode(ch);
+                break;
+            case COMMAND:
+                ProcessCommandMode(ch);
+                break;
+        }
+    }
 
     endwin();
-
     return 0;
 }
