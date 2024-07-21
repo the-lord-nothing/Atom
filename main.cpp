@@ -5,13 +5,9 @@
 #include <curses.h>
 #include <csignal>
 #include <unistd.h>
-#include <stack>
 #include <unordered_set>
-#include <regex>
 
 std::vector<std::string> buffer;
-std::stack<std::pair<int, std::string>> undoStack;
-std::stack<std::pair<int, std::string>> redoStack;
 std::vector<std::string> clipboard;
 int currentLine = 0;
 int currentColumn = 0;
@@ -91,10 +87,10 @@ void DisplayBuffer() {
             } else {
                 if (keywords.find(word) != keywords.end()) {
                     attron(COLOR_PAIR(1));
-                    mvprintw(y, x - word.size(), word.c_str());
+                    mvprintw(y, x - word.size(), "%s", word.c_str());
                     attroff(COLOR_PAIR(1));
                 } else {
-                    mvprintw(y, x - word.size(), word.c_str());
+                    mvprintw(y, x - word.size(), "%s", word.c_str());
                 }
                 word.clear();
                 mvaddch(y, x, ch);
@@ -103,10 +99,10 @@ void DisplayBuffer() {
         }
         if (!word.empty() && keywords.find(word) != keywords.end()) {
             attron(COLOR_PAIR(1));
-            mvprintw(y, x - word.size(), word.c_str());
+            mvprintw(y, x - word.size(), "%s", word.c_str());
             attroff(COLOR_PAIR(1));
         } else if (!word.empty()) {
-            mvprintw(y, x - word.size(), word.c_str());
+            mvprintw(y, x - word.size(), "%s", word.c_str());
         }
         ++y;
     }
@@ -163,7 +159,6 @@ void DeleteToNextWord() {
         std::string& line = buffer[currentLine];
 
         MoveToNextWord();
-        undoStack.push({currentLine, line});
         // Проверка на выход за границы
         if (currentColumn <= line.size()) {
             line.erase(startColumn, currentColumn - startColumn);
@@ -181,44 +176,6 @@ void ChangeToNextWord() {
     printw("-- INSERT --");
 }
 
-void Undo() {
-    if (!undoStack.empty()) {
-        auto action = undoStack.top();
-        undoStack.pop();
-
-        int line = action.first;
-        // Проверка на выход за границы
-        if (line < buffer.size()) {
-            std::string& text = action.second;
-
-            redoStack.push({line, buffer[line]});
-            buffer[line] = text;
-            currentLine = line;
-            currentColumn = text.size();
-            DisplayBuffer();
-        }
-    }
-}
-
-void Redo() {
-    if (!redoStack.empty()) {
-        auto action = redoStack.top();
-        redoStack.pop();
-
-        int line = action.first;
-        // Проверка на выход за границы
-        if (line < buffer.size()) {
-            std::string& text = action.second;
-
-            undoStack.push({line, buffer[line]});
-            buffer[line] = text;
-            currentLine = line;
-            currentColumn = text.size();
-            DisplayBuffer();
-        }
-    }
-}
-
 void CopyLine() {
     clipboard.clear();
     // Проверка на выход за границы
@@ -229,7 +186,6 @@ void CopyLine() {
 
 void CutLine() {
     if (currentLine < buffer.size()) {
-        undoStack.push({currentLine, buffer[currentLine]});
         clipboard.clear();
         clipboard.push_back(buffer[currentLine]);
         buffer.erase(buffer.begin() + currentLine);
@@ -249,9 +205,10 @@ void PasteLineBefore() {
     if (!clipboard.empty()) {
         // Проверка на выход за границы
         if (currentLine >= 0 && currentLine < buffer.size()) {
-            undoStack.push({currentLine, buffer[currentLine]});
+            buffer.insert(buffer.begin() + currentLine, clipboard[0]);
+        } else {
+            buffer.insert(buffer.begin(), clipboard[0]);
         }
-        buffer.insert(buffer.begin() + currentLine, clipboard[0]);
         currentColumn = 0;
         DisplayBuffer();
     }
@@ -260,7 +217,6 @@ void PasteLineBefore() {
 void PasteLineAfter() {
     if (!clipboard.empty()) {
         if (currentLine + 1 < buffer.size()) {
-            undoStack.push({currentLine + 1, buffer[currentLine + 1]});
             buffer.insert(buffer.begin() + currentLine + 1, clipboard[0]);
         } else {
             buffer.push_back(clipboard[0]);
@@ -296,12 +252,6 @@ void ProcessNormalMode(int ch) {
             break;
         case 'c':
             ChangeToNextWord();
-            break;
-        case 'u':
-            Undo();
-            break;
-        case 'r':
-            Redo();
             break;
         case 'y':
             CopyLine();
