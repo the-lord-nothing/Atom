@@ -112,20 +112,12 @@ void DisplayBuffer() {
 }
 
 void MoveCursor(int dx, int dy) {
-    int newColumn = currentColumn + dx;
     int newLine = currentLine + dy;
+    if (newLine < 0) newLine = 0;
+    else if (newLine >= buffer.size()) newLine = buffer.size() - 1;
 
-    if (newLine < 0) {
-        newLine = 0;
-    } else if (newLine >= buffer.size()) {
-        newLine = buffer.size() - 1;
-    }
-
-    if (newColumn < 0) {
-        newColumn = 0;
-    } else if (newColumn >= buffer[newLine].size()) {
-        newColumn = buffer[newLine].size();
-    }
+    int newColumn = currentColumn + dx;
+    if (!buffer.empty() && newColumn >= buffer[newLine].size()) newColumn = buffer[newLine].size();
 
     currentLine = newLine;
     currentColumn = newColumn;
@@ -159,7 +151,6 @@ void DeleteToNextWord() {
         std::string& line = buffer[currentLine];
 
         MoveToNextWord();
-        // Проверка на выход за границы
         if (currentColumn <= line.size()) {
             line.erase(startColumn, currentColumn - startColumn);
             currentColumn = startColumn;
@@ -189,13 +180,8 @@ void CutLine() {
         clipboard.clear();
         clipboard.push_back(buffer[currentLine]);
         buffer.erase(buffer.begin() + currentLine);
-        if (currentLine >= buffer.size()) {
-            currentLine = buffer.size() - 1;
-        }
-        // Проверка на выход за границы
-        if (currentLine < 0) {
-            currentLine = 0;
-        }
+        if (currentLine >= buffer.size()) currentLine = buffer.size() - 1;
+        if (currentLine < 0) currentLine = 0;
         currentColumn = 0;
         DisplayBuffer();
     }
@@ -203,12 +189,8 @@ void CutLine() {
 
 void PasteLineBefore() {
     if (!clipboard.empty()) {
-        // Проверка на выход за границы
-        if (currentLine >= 0 && currentLine < buffer.size()) {
-            buffer.insert(buffer.begin() + currentLine, clipboard[0]);
-        } else {
-            buffer.insert(buffer.begin(), clipboard[0]);
-        }
+        if (currentLine >= 0 && currentLine < buffer.size()) buffer.insert(buffer.begin() + currentLine, clipboard[0]);
+        else buffer.insert(buffer.begin(), clipboard[0]);
         currentColumn = 0;
         DisplayBuffer();
     }
@@ -216,16 +198,14 @@ void PasteLineBefore() {
 
 void PasteLineAfter() {
     if (!clipboard.empty()) {
-        if (currentLine + 1 < buffer.size()) {
-            buffer.insert(buffer.begin() + currentLine + 1, clipboard[0]);
-        } else {
-            buffer.push_back(clipboard[0]);
-        }
+        if (currentLine + 1 < buffer.size()) buffer.insert(buffer.begin() + currentLine + 1, clipboard[0]);
+        else buffer.push_back(clipboard[0]);
         currentLine++;
         currentColumn = 0;
         DisplayBuffer();
     }
 }
+
 
 void ProcessNormalMode(int ch) {
     switch (ch) {
@@ -282,18 +262,15 @@ void ProcessNormalMode(int ch) {
 }
 
 void ProcessInsertMode(int ch) {
+    if (buffer.empty()) buffer.push_back("");
+
     switch (ch) {
-        case 27: // ESC
+        case 27:
             currentMode = NORMAL;
-            move(LINES - 1, 0);
-            clrtoeol();
-            printw("-- NORMAL --");
             break;
         case KEY_BACKSPACE:
         case 127:
-            if (currentColumn > 0) {
-                buffer[currentLine].erase(--currentColumn, 1);
-            }
+            if (currentColumn > 0) buffer[currentLine].erase(--currentColumn, 1);
             break;
         default:
             buffer[currentLine].insert(currentColumn++, 1, ch);
